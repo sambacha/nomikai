@@ -2,15 +2,22 @@
 pragma solidity 0.6.12;
 
 /// @dev brief interface for moloch dao v2 erc20 token txs
-interface IERC20 { 
+interface IERC20 {
     function balanceOf(address account) external view returns (uint256);
+
     function approve(address spender, uint256 amount) external returns (bool);
+
     function transfer(address to, uint256 amount) external returns (bool);
-    function transferFrom(address from, address to, uint256 amount) external returns (bool);
+
+    function transferFrom(
+        address from,
+        address to,
+        uint256 amount
+    ) external returns (bool);
 }
 
-/// @dev brief interface for moloch dao v2 
-interface IMOLOCH { 
+/// @dev brief interface for moloch dao v2
+interface IMOLOCH {
     function submitProposal(
         address applicant,
         uint256 sharesRequested,
@@ -21,70 +28,83 @@ interface IMOLOCH {
         address paymentToken,
         string calldata details
     ) external returns (uint256);
-    
+
     function getProposalFlags(uint256 proposalId) external view returns (bool[6] memory);
-    
+
     function withdrawBalance(address token, uint256 amount) external;
 }
 
 /// @dev interface for sushi bar (`xSUSHI`) txs
-interface ISushiBar { 
-   function enter(uint256 _amount) external;
-   function leave(uint256 _share) external;
+interface ISushiBar {
+    function enter(uint256 _amount) external;
+
+    function leave(uint256 _share) external;
 }
 
 /// @dev helper for address type
-library Address { 
+library Address {
     function isContract(address account) internal view returns (bool) {
         uint256 size;
-        assembly { size := extcodesize(account) }
+        assembly {
+            size := extcodesize(account)
+        }
         return size > 0;
     }
 }
 
 /// @dev helper for non-standard token
-library SafeERC20 { 
+library SafeERC20 {
     using Address for address;
-    
-    function safeTransfer(IERC20 token, address to, uint256 amount) internal {
+
+    function safeTransfer(
+        IERC20 token,
+        address to,
+        uint256 amount
+    ) internal {
         _callOptionalReturn(token, abi.encodeWithSelector(token.transfer.selector, to, amount));
     }
-    
-    function safeTransferFrom(IERC20 token, address from, address to, uint256 amount) internal {
+
+    function safeTransferFrom(
+        IERC20 token,
+        address from,
+        address to,
+        uint256 amount
+    ) internal {
         _callOptionalReturn(token, abi.encodeWithSelector(token.transferFrom.selector, from, to, amount));
     }
-    
+
     function _callOptionalReturn(IERC20 token, bytes memory data) private {
         require(address(token).isContract(), "SafeERC20: call to non-contract");
         (bool success, bytes memory returnData) = address(token).call(data);
         require(success, "SafeERC20: low-level call failed");
 
-        if (returnData.length > 0) { // return data is optional
+        if (returnData.length > 0) {
+            // return data is optional
             require(abi.decode(returnData, (bool)), "SafeERC20: erc20 operation did not succeed");
         }
     }
 }
 
 /// @dev helper for under/overflow check
-library SafeMath { 
+library SafeMath {
     function add(uint256 a, uint256 b) internal pure returns (uint256) {
         uint256 c = a + b;
         require(c >= a, "SafeMath: addition overflow");
         return c;
     }
-    
+
     function sub(uint256 a, uint256 b) internal pure returns (uint256) {
         require(b <= a, "SafeMath: subtraction overflow");
         return a - b;
     }
-    
+
     function mul(uint256 a, uint256 b) internal pure returns (uint256) {
         if (a == 0) return 0;
         uint256 c = a * b;
         require(c / a == b, "SafeMath: multiplication overflow");
         return c;
     }
-    
+
     function div(uint256 a, uint256 b) internal pure returns (uint256) {
         require(b > 0, "SafeMath: division by zero");
         return a / b;
@@ -127,7 +147,12 @@ contract SushiMinion is ReentrancyGuard {
     event ProposeAction(uint256 proposalId, address proposer);
     event ExecuteAction(uint256 proposalId, address executor);
 
-    constructor(address _moloch, address _sushiToken, address _xSushiToken, address _aave) public {
+    constructor(
+        address _moloch,
+        address _sushiToken,
+        address _xSushiToken,
+        address _aave
+    ) public {
         moloch = IMOLOCH(_moloch);
         sushiToken = _sushiToken;
         IERC20(_sushiToken).approve(_xSushiToken, uint256(-1)); // max approve sushi bar for sushi token entry
@@ -147,27 +172,13 @@ contract SushiMinion is ReentrancyGuard {
         // No calls to zero address allows us to check that proxy submitted
         // the proposal without getting the proposal struct from parent moloch
         require(actionTo != address(0), "invalid actionTo");
-        
+
         address token = sushiToken;
 
-        uint256 proposalId = moloch.submitProposal(
-            address(this),
-            0,
-            0,
-            0,
-            token,
-            0,
-            token,
-            details
-        );
+        uint256 proposalId = moloch.submitProposal(address(this), 0, 0, 0, token, 0, token, details);
 
-        Action memory action = Action({
-            value: actionValue,
-            to: actionTo,
-            proposer: msg.sender,
-            executed: false,
-            data: actionData
-        });
+        Action memory action =
+            Action({value: actionValue, to: actionTo, proposer: msg.sender, executed: false, data: actionData});
 
         actions[proposalId] = action;
 
@@ -200,7 +211,7 @@ WELCOME TO THE POOL PARTY (飲み会)
 _Developed by Peeps Democracy & LexDAO
 __USE AT YOUR OWN RISK
 =====================================*/
-/// SushiNomikai is the coolest party in town. You come in with some Sushi and stake (xSushi) to vote on party matters, like what food gets served. You can leave anytime with your fair share of party food. 
+/// SushiNomikai is the coolest party in town. You come in with some Sushi and stake (xSushi) to vote on party matters, like what food gets served. You can leave anytime with your fair share of party food.
 contract SushiNomikai is ReentrancyGuard {
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
@@ -234,11 +245,46 @@ contract SushiNomikai is ReentrancyGuard {
     // ***************
     // EVENTS
     // ***************
-    event SummonComplete(address indexed summoner, address[] tokens, uint256 summoningTime, uint256 periodDuration, uint256 votingPeriodLength, uint256 gracePeriodLength, uint256 proposalDeposit, uint256 dilutionBound, uint256 processingReward);
+    event SummonComplete(
+        address indexed summoner,
+        address[] tokens,
+        uint256 summoningTime,
+        uint256 periodDuration,
+        uint256 votingPeriodLength,
+        uint256 gracePeriodLength,
+        uint256 proposalDeposit,
+        uint256 dilutionBound,
+        uint256 processingReward
+    );
     event MakeDeposit(address indexed memberAddress, uint256 tributeOffered, uint256 indexed shares);
-    event SubmitProposal(address indexed applicant, uint256 sharesRequested, uint256 lootRequested, uint256 tributeOffered, address tributeToken, uint256 paymentRequested, address paymentToken, string details, bool[6] flags, uint256 proposalId, address indexed delegateKey, address indexed memberAddress);
-    event SponsorProposal(address indexed delegateKey, address indexed memberAddress, uint256 proposalId, uint256 proposalIndex, uint256 startingPeriod);
-    event SubmitVote(uint256 proposalId, uint256 indexed proposalIndex, address indexed delegateKey, address indexed memberAddress, uint8 uintVote);
+    event SubmitProposal(
+        address indexed applicant,
+        uint256 sharesRequested,
+        uint256 lootRequested,
+        uint256 tributeOffered,
+        address tributeToken,
+        uint256 paymentRequested,
+        address paymentToken,
+        string details,
+        bool[6] flags,
+        uint256 proposalId,
+        address indexed delegateKey,
+        address indexed memberAddress
+    );
+    event SponsorProposal(
+        address indexed delegateKey,
+        address indexed memberAddress,
+        uint256 proposalId,
+        uint256 proposalIndex,
+        uint256 startingPeriod
+    );
+    event SubmitVote(
+        uint256 proposalId,
+        uint256 indexed proposalIndex,
+        address indexed delegateKey,
+        address indexed memberAddress,
+        uint8 uintVote
+    );
     event ProcessProposal(uint256 indexed proposalIndex, uint256 indexed proposalId, bool didPass);
     event ProcessWhitelistProposal(uint256 indexed proposalIndex, uint256 indexed proposalId, bool didPass);
     event ProcessGuildKickProposal(uint256 indexed proposalIndex, uint256 indexed proposalId, bool didPass);
@@ -349,18 +395,28 @@ contract SushiNomikai is ReentrancyGuard {
         require(_approvedTokens.length > 0, "need at least one approved token");
         require(_approvedTokens.length <= MAX_TOKEN_WHITELIST_COUNT, "too many tokens");
         require(_proposalDeposit >= _processingReward, "_proposalDeposit cannot be smaller than _processingReward");
-        
+
         tokenWhitelist[_sushiToken] = true;
         approvedTokens.push(_sushiToken);
-        
+
         tokenWhitelist[_xSushiToken] = true;
         approvedTokens.push(_xSushiToken);
-        
+
         tokenWhitelist[_aXSushiToken] = true;
         approvedTokens.push(_aXSushiToken);
-        
+
         // NOTE: move event up here, avoid stack too deep if too many approved tokens
-        emit SummonComplete(_summoner, _approvedTokens, now, _periodDuration, _votingPeriodLength, _gracePeriodLength, _proposalDeposit, _dilutionBound, _processingReward);
+        emit SummonComplete(
+            _summoner,
+            _approvedTokens,
+            now,
+            _periodDuration,
+            _votingPeriodLength,
+            _gracePeriodLength,
+            _proposalDeposit,
+            _dilutionBound,
+            _processingReward
+        );
 
         for (uint256 i = 0; i < _approvedTokens.length; i++) {
             require(_approvedTokens[i] != address(0), "_approvedToken cannot be 0");
@@ -368,16 +424,16 @@ contract SushiNomikai is ReentrancyGuard {
             tokenWhitelist[_approvedTokens[i]] = true;
             approvedTokens.push(_approvedTokens[i]);
         }
-        
+
         IERC20(_sushiToken).approve(_xSushiToken, uint256(-1)); // max approve sushi bar for sushi token entry
-        
-        SushiMinion minion = new SushiMinion(address(this), _sushiToken, _xSushiToken, _aave); // summon sushi minion contract 
+
+        SushiMinion minion = new SushiMinion(address(this), _sushiToken, _xSushiToken, _aave); // summon sushi minion contract
         sushiMinion = address(minion); // record minion reference
-        
+
         depositToken = _sushiToken;
         sushiToken = _sushiToken;
         xSushiToken = _xSushiToken;
-        
+
         periodDuration = _periodDuration;
         votingPeriodLength = _votingPeriodLength;
         gracePeriodLength = _gracePeriodLength;
@@ -390,47 +446,47 @@ contract SushiNomikai is ReentrancyGuard {
         members[_summoner] = Member(_summoner, 0, 0, true, 0, 0);
         memberAddressByDelegateKey[_summoner] = _summoner;
     }
-    
+
     /********************
     SUSHI 飲み会 DEPOSITS
     ********************/
     function makeSushiDeposit(uint256 tributeOffered) external nonReentrant {
         require(IERC20(sushiToken).transferFrom(msg.sender, address(this), tributeOffered), "sushi tribute failed");
-        
+
         uint256 startBalance = IERC20(xSushiToken).balanceOf(address(this));
         ISushiBar(xSushiToken).enter(tributeOffered);
         uint256 shares = IERC20(xSushiToken).balanceOf(address(this)) - startBalance;
-        
+
         if (!members[msg.sender].exists) {
             members[msg.sender] = Member(msg.sender, shares, 0, true, 0, 0);
             memberAddressByDelegateKey[msg.sender] = msg.sender;
         } else {
             members[msg.sender].shares += shares;
         }
-        
+
         require(totalShares + shares <= MAX_NUMBER_OF_SHARES_AND_LOOT, "too many shares requested");
         totalShares += shares;
-        
+
         unsafeAddToBalance(GUILD, xSushiToken, shares);
-        
+
         emit MakeDeposit(msg.sender, tributeOffered, shares);
     }
-    
+
     function makeXSushiDeposit(uint256 tributeOffered) external nonReentrant {
         require(IERC20(xSushiToken).transferFrom(msg.sender, address(this), tributeOffered), "xSushi tribute failed");
-        
+
         if (!members[msg.sender].exists) {
             members[msg.sender] = Member(msg.sender, tributeOffered, 0, true, 0, 0);
             memberAddressByDelegateKey[msg.sender] = msg.sender;
         } else {
             members[msg.sender].shares += tributeOffered;
         }
-        
+
         require(totalShares + tributeOffered <= MAX_NUMBER_OF_SHARES_AND_LOOT, "too many shares requested");
         totalShares += tributeOffered;
-        
+
         unsafeAddToBalance(GUILD, xSushiToken, tributeOffered);
-        
+
         emit MakeDeposit(msg.sender, tributeOffered, tributeOffered);
     }
 
@@ -451,11 +507,17 @@ contract SushiNomikai is ReentrancyGuard {
         require(tokenWhitelist[tributeToken], "tributeToken is not whitelisted");
         require(tokenWhitelist[paymentToken], "payment is not whitelisted");
         require(applicant != address(0), "applicant cannot be 0");
-        require(applicant != GUILD && applicant != ESCROW && applicant != TOTAL, "applicant address cannot be reserved");
+        require(
+            applicant != GUILD && applicant != ESCROW && applicant != TOTAL,
+            "applicant address cannot be reserved"
+        );
         require(members[applicant].jailed == 0, "proposal applicant must not be jailed");
 
         if (tributeOffered > 0 && userTokenBalances[GUILD][tributeToken] == 0) {
-            require(totalGuildBankTokens < MAX_TOKEN_GUILDBANK_COUNT, 'cannot submit more tribute proposals for new tokens - guildbank is full');
+            require(
+                totalGuildBankTokens < MAX_TOKEN_GUILDBANK_COUNT,
+                "cannot submit more tribute proposals for new tokens - guildbank is full"
+            );
         }
 
         // collect tribute from proposer and store it in the Moloch until the proposal is processed
@@ -464,11 +526,25 @@ contract SushiNomikai is ReentrancyGuard {
 
         bool[6] memory flags; // [sponsored, processed, didPass, cancelled, whitelist, guildkick]
 
-        _submitProposal(applicant, sharesRequested, lootRequested, tributeOffered, tributeToken, paymentRequested, paymentToken, details, flags);
+        _submitProposal(
+            applicant,
+            sharesRequested,
+            lootRequested,
+            tributeOffered,
+            tributeToken,
+            paymentRequested,
+            paymentToken,
+            details,
+            flags
+        );
         return proposalCount - 1; // return proposalId - contracts calling submit might want it
     }
 
-    function submitWhitelistProposal(address tokenToWhitelist, string memory details) external nonReentrant returns (uint256 proposalId) {
+    function submitWhitelistProposal(address tokenToWhitelist, string memory details)
+        external
+        nonReentrant
+        returns (uint256 proposalId)
+    {
         require(tokenToWhitelist != address(0), "must provide token address");
         require(!tokenWhitelist[tokenToWhitelist], "cannot already have whitelisted the token");
         require(approvedTokens.length < MAX_TOKEN_WHITELIST_COUNT, "cannot submit more whitelist proposals");
@@ -480,7 +556,11 @@ contract SushiNomikai is ReentrancyGuard {
         return proposalCount - 1;
     }
 
-    function submitGuildKickProposal(address memberToKick, string memory details) external nonReentrant returns (uint256 proposalId) {
+    function submitGuildKickProposal(address memberToKick, string memory details)
+        external
+        nonReentrant
+        returns (uint256 proposalId)
+    {
         Member memory member = members[memberToKick];
 
         require(member.shares > 0 || member.loot > 0, "member must have at least one share or one loot");
@@ -504,65 +584,87 @@ contract SushiNomikai is ReentrancyGuard {
         string memory details,
         bool[6] memory flags
     ) private {
-        Proposal memory proposal = Proposal({
-            applicant : applicant,
-            proposer : msg.sender,
-            sponsor : address(0),
-            sharesRequested : sharesRequested,
-            lootRequested : lootRequested,
-            tributeOffered : tributeOffered,
-            tributeToken : tributeToken,
-            paymentRequested : paymentRequested,
-            paymentToken : paymentToken,
-            startingPeriod : 0,
-            yesVotes : 0,
-            noVotes : 0,
-            flags : flags,
-            details : details,
-            maxTotalSharesAndLootAtYesVote : 0
-        });
+        Proposal memory proposal =
+            Proposal({
+                applicant: applicant,
+                proposer: msg.sender,
+                sponsor: address(0),
+                sharesRequested: sharesRequested,
+                lootRequested: lootRequested,
+                tributeOffered: tributeOffered,
+                tributeToken: tributeToken,
+                paymentRequested: paymentRequested,
+                paymentToken: paymentToken,
+                startingPeriod: 0,
+                yesVotes: 0,
+                noVotes: 0,
+                flags: flags,
+                details: details,
+                maxTotalSharesAndLootAtYesVote: 0
+            });
 
         proposals[proposalCount] = proposal;
         address memberAddress = memberAddressByDelegateKey[msg.sender];
         // NOTE: argument order matters, avoid stack too deep
-        emit SubmitProposal(applicant, sharesRequested, lootRequested, tributeOffered, tributeToken, paymentRequested, paymentToken, details, flags, proposalCount, msg.sender, memberAddress);
+        emit SubmitProposal(
+            applicant,
+            sharesRequested,
+            lootRequested,
+            tributeOffered,
+            tributeToken,
+            paymentRequested,
+            paymentToken,
+            details,
+            flags,
+            proposalCount,
+            msg.sender,
+            memberAddress
+        );
         proposalCount += 1;
     }
 
     function sponsorProposal(uint256 proposalId) external nonReentrant onlyDelegate {
         // collect proposal deposit from sponsor and store it in the Moloch until the proposal is processed
-        require(IERC20(depositToken).transferFrom(msg.sender, address(this), proposalDeposit), "proposal deposit token transfer failed");
+        require(
+            IERC20(depositToken).transferFrom(msg.sender, address(this), proposalDeposit),
+            "proposal deposit token transfer failed"
+        );
         unsafeAddToBalance(ESCROW, depositToken, proposalDeposit);
 
         Proposal storage proposal = proposals[proposalId];
 
-        require(proposal.proposer != address(0), 'proposal must have been proposed');
+        require(proposal.proposer != address(0), "proposal must have been proposed");
         require(!proposal.flags[0], "proposal has already been sponsored");
         require(!proposal.flags[3], "proposal has been cancelled");
         require(members[proposal.applicant].jailed == 0, "proposal applicant must not be jailed");
 
         if (proposal.tributeOffered > 0 && userTokenBalances[GUILD][proposal.tributeToken] == 0) {
-            require(totalGuildBankTokens < MAX_TOKEN_GUILDBANK_COUNT, 'cannot sponsor more tribute proposals for new tokens - guildbank is full');
+            require(
+                totalGuildBankTokens < MAX_TOKEN_GUILDBANK_COUNT,
+                "cannot sponsor more tribute proposals for new tokens - guildbank is full"
+            );
         }
 
         // whitelist proposal
         if (proposal.flags[4]) {
             require(!tokenWhitelist[address(proposal.tributeToken)], "cannot already have whitelisted the token");
-            require(!proposedToWhitelist[address(proposal.tributeToken)], 'already proposed to whitelist');
+            require(!proposedToWhitelist[address(proposal.tributeToken)], "already proposed to whitelist");
             require(approvedTokens.length < MAX_TOKEN_WHITELIST_COUNT, "cannot sponsor more whitelist proposals");
             proposedToWhitelist[address(proposal.tributeToken)] = true;
 
-        // guild kick proposal
+            // guild kick proposal
         } else if (proposal.flags[5]) {
-            require(!proposedToKick[proposal.applicant], 'already proposed to kick');
+            require(!proposedToKick[proposal.applicant], "already proposed to kick");
             proposedToKick[proposal.applicant] = true;
         }
 
         // compute startingPeriod for proposal
-        uint256 startingPeriod = max(
-            getCurrentPeriod(),
-            proposalQueue.length == 0 ? 0 : proposals[proposalQueue[proposalQueue.length.sub(1)]].startingPeriod
-        ).add(1);
+        uint256 startingPeriod =
+            max(
+                getCurrentPeriod(),
+                proposalQueue.length == 0 ? 0 : proposals[proposalQueue[proposalQueue.length.sub(1)]].startingPeriod
+            )
+                .add(1);
 
         proposal.startingPeriod = startingPeriod;
 
@@ -573,7 +675,7 @@ contract SushiNomikai is ReentrancyGuard {
 
         // append proposal to the queue
         proposalQueue.push(proposalId);
-        
+
         emit SponsorProposal(msg.sender, memberAddress, proposalId, proposalQueue.length.sub(1), startingPeriod);
     }
 
@@ -607,11 +709,10 @@ contract SushiNomikai is ReentrancyGuard {
             if (totalShares.add(totalLoot) > proposal.maxTotalSharesAndLootAtYesVote) {
                 proposal.maxTotalSharesAndLootAtYesVote = totalShares.add(totalLoot);
             }
-
         } else if (vote == Vote.No) {
             proposal.noVotes = proposal.noVotes.add(member.shares);
         }
-     
+
         // NOTE: subgraph indexes by proposalId not proposalIndex since proposalIndex isn't set untill it's been sponsored but proposal is created on submission
         emit SubmitVote(proposalQueue[proposalIndex], proposalIndex, msg.sender, memberAddress, uintVote);
     }
@@ -629,7 +730,10 @@ contract SushiNomikai is ReentrancyGuard {
         bool didPass = _didPass(proposalIndex);
 
         // Make the proposal fail if the new total number of shares and loot exceeds the limit
-        if (totalShares.add(totalLoot).add(proposal.sharesRequested).add(proposal.lootRequested) > MAX_NUMBER_OF_SHARES_AND_LOOT) {
+        if (
+            totalShares.add(totalLoot).add(proposal.sharesRequested).add(proposal.lootRequested) >
+            MAX_NUMBER_OF_SHARES_AND_LOOT
+        ) {
             didPass = false;
         }
 
@@ -639,8 +743,12 @@ contract SushiNomikai is ReentrancyGuard {
         }
 
         // Make the proposal fail if it would result in too many tokens with non-zero balance in guild bank
-        if (proposal.tributeOffered > 0 && userTokenBalances[GUILD][proposal.tributeToken] == 0 && totalGuildBankTokens >= MAX_TOKEN_GUILDBANK_COUNT) {
-           didPass = false;
+        if (
+            proposal.tributeOffered > 0 &&
+            userTokenBalances[GUILD][proposal.tributeToken] == 0 &&
+            totalGuildBankTokens >= MAX_TOKEN_GUILDBANK_COUNT
+        ) {
+            didPass = false;
         }
 
         // PROPOSAL PASSED
@@ -652,7 +760,7 @@ contract SushiNomikai is ReentrancyGuard {
                 members[proposal.applicant].shares = members[proposal.applicant].shares.add(proposal.sharesRequested);
                 members[proposal.applicant].loot = members[proposal.applicant].loot.add(proposal.lootRequested);
 
-            // the applicant is a new member, create a new record for them
+                // the applicant is a new member, create a new record for them
             } else {
                 // if the applicant address is already taken by a member's delegateKey, reset it to their member address
                 if (members[memberAddressByDelegateKey[proposal.applicant]].exists) {
@@ -662,7 +770,14 @@ contract SushiNomikai is ReentrancyGuard {
                 }
 
                 // use applicant address as delegateKey by default
-                members[proposal.applicant] = Member(proposal.applicant, proposal.sharesRequested, proposal.lootRequested, true, 0, 0);
+                members[proposal.applicant] = Member(
+                    proposal.applicant,
+                    proposal.sharesRequested,
+                    proposal.lootRequested,
+                    true,
+                    0,
+                    0
+                );
                 memberAddressByDelegateKey[proposal.applicant] = proposal.applicant;
             }
 
@@ -683,7 +798,7 @@ contract SushiNomikai is ReentrancyGuard {
                 totalGuildBankTokens -= 1;
             }
 
-        // PROPOSAL FAILED
+            // PROPOSAL FAILED
         } else {
             // return all tokens to the proposer (not the applicant, because funds come from proposer)
             unsafeInternalTransfer(ESCROW, proposal.proposer, proposal.tributeToken, proposal.tributeOffered);
@@ -779,9 +894,15 @@ contract SushiNomikai is ReentrancyGuard {
         require(proposalIndex < proposalQueue.length, "proposal does not exist");
         Proposal memory proposal = proposals[proposalQueue[proposalIndex]];
 
-        require(getCurrentPeriod() >= proposal.startingPeriod.add(votingPeriodLength).add(gracePeriodLength), "proposal is not ready to be processed");
+        require(
+            getCurrentPeriod() >= proposal.startingPeriod.add(votingPeriodLength).add(gracePeriodLength),
+            "proposal is not ready to be processed"
+        );
         require(proposal.flags[1] == false, "proposal has already been processed");
-        require(proposalIndex == 0 || proposals[proposalQueue[proposalIndex.sub(1)]].flags[1], "previous proposal must be processed");
+        require(
+            proposalIndex == 0 || proposals[proposalQueue[proposalIndex.sub(1)]].flags[1],
+            "previous proposal must be processed"
+        );
     }
 
     function _returnDeposit(address sponsor) private {
@@ -793,7 +914,11 @@ contract SushiNomikai is ReentrancyGuard {
         _ragequit(msg.sender, sharesToBurn, lootToBurn);
     }
 
-    function _ragequit(address memberAddress, uint256 sharesToBurn, uint256 lootToBurn) private {
+    function _ragequit(
+        address memberAddress,
+        uint256 sharesToBurn,
+        uint256 lootToBurn
+    ) private {
         uint256 initialTotalSharesAndLoot = totalShares.add(totalLoot);
 
         Member storage member = members[memberAddress];
@@ -801,7 +926,10 @@ contract SushiNomikai is ReentrancyGuard {
         require(member.shares >= sharesToBurn, "insufficient shares");
         require(member.loot >= lootToBurn, "insufficient loot");
 
-        require(canRagequit(member.highestIndexYesVote), "cannot ragequit until highest index proposal member voted YES on is processed");
+        require(
+            canRagequit(member.highestIndexYesVote),
+            "cannot ragequit until highest index proposal member voted YES on is processed"
+        );
 
         uint256 sharesAndLootToBurn = sharesToBurn.add(lootToBurn);
 
@@ -812,8 +940,10 @@ contract SushiNomikai is ReentrancyGuard {
         totalLoot = totalLoot.sub(lootToBurn);
 
         for (uint256 i = 0; i < approvedTokens.length; i++) {
-            uint256 amountToRagequit = fairShare(userTokenBalances[GUILD][approvedTokens[i]], sharesAndLootToBurn, initialTotalSharesAndLoot);
-            if (amountToRagequit > 0) { // gas optimization to allow a higher maximum token limit
+            uint256 amountToRagequit =
+                fairShare(userTokenBalances[GUILD][approvedTokens[i]], sharesAndLootToBurn, initialTotalSharesAndLoot);
+            if (amountToRagequit > 0) {
+                // gas optimization to allow a higher maximum token limit
                 // deliberately not using safemath here to keep overflows from preventing the function execution (which would break ragekicks)
                 // if a token overflows, it is because the supply was artificially inflated to oblivion, so we probably don't care about it anyways
                 userTokenBalances[GUILD][approvedTokens[i]] -= amountToRagequit;
@@ -829,7 +959,10 @@ contract SushiNomikai is ReentrancyGuard {
 
         require(member.jailed != 0, "member must be in jail");
         require(member.loot > 0, "member must have some loot"); // note - should be impossible for jailed member to have shares
-        require(canRagequit(member.highestIndexYesVote), "cannot ragequit until highest index proposal member voted YES on is processed");
+        require(
+            canRagequit(member.highestIndexYesVote),
+            "cannot ragequit until highest index proposal member voted YES on is processed"
+        );
 
         _ragequit(memberToKick, 0, member.loot);
     }
@@ -838,28 +971,37 @@ contract SushiNomikai is ReentrancyGuard {
         _withdrawBalance(token, amount);
     }
 
-    function withdrawBalances(address[] memory tokens, uint256[] memory amounts, bool max) external nonReentrant {
+    function withdrawBalances(
+        address[] memory tokens,
+        uint256[] memory amounts,
+        bool max
+    ) external nonReentrant {
         require(tokens.length == amounts.length, "tokens and amounts arrays must be matching lengths");
 
-        for (uint256 i=0; i < tokens.length; i++) {
+        for (uint256 i = 0; i < tokens.length; i++) {
             uint256 withdrawAmount = amounts[i];
-            if (max) { // withdraw the maximum balance
+            if (max) {
+                // withdraw the maximum balance
                 withdrawAmount = userTokenBalances[msg.sender][tokens[i]];
             }
 
             _withdrawBalance(tokens[i], withdrawAmount);
         }
     }
-    
+
     function _withdrawBalance(address token, uint256 amount) private {
         require(userTokenBalances[msg.sender][token] >= amount, "insufficient balance");
         unsafeSubtractFromBalance(msg.sender, token, amount);
         IERC20(token).safeTransfer(msg.sender, amount);
         emit Withdraw(msg.sender, token, amount);
     }
-    
+
     // allows guild bank users to make internal token transfers among accounts
-    function internalTransfer(address to, address token, uint256 amount) external {
+    function internalTransfer(
+        address to,
+        address token,
+        uint256 amount
+    ) external {
         require(userTokenBalances[msg.sender][token] >= amount, "insufficient amount");
         unsafeInternalTransfer(msg.sender, to, token, amount);
         emit InternalTransfer(msg.sender, to, token, amount);
@@ -868,10 +1010,10 @@ contract SushiNomikai is ReentrancyGuard {
     function collectTokens(address token) external onlyDelegate nonReentrant {
         uint256 amountToCollect = IERC20(token).balanceOf(address(this)).sub(userTokenBalances[TOTAL][token]);
         // only collect if 1) there are tokens to collect 2) token is whitelisted 3) token has non-zero balance
-        require(amountToCollect > 0, 'no tokens to collect');
-        require(tokenWhitelist[token], 'token to collect must be whitelisted');
-        require(userTokenBalances[GUILD][token] > 0, 'token to collect must have non-zero guild bank balance');
-        
+        require(amountToCollect > 0, "no tokens to collect");
+        require(tokenWhitelist[token], "token to collect must be whitelisted");
+        require(userTokenBalances[GUILD][token] > 0, "token to collect must have non-zero guild bank balance");
+
         unsafeAddToBalance(GUILD, token, amountToCollect);
         emit TokensCollected(token, amountToCollect);
     }
@@ -884,7 +1026,7 @@ contract SushiNomikai is ReentrancyGuard {
         require(msg.sender == proposal.proposer, "solely the proposer can cancel");
 
         proposal.flags[3] = true; // cancelled
-        
+
         unsafeInternalTransfer(ESCROW, proposal.proposer, proposal.tributeToken, proposal.tributeOffered);
         emit CancelProposal(proposalId, msg.sender);
     }
@@ -895,7 +1037,10 @@ contract SushiNomikai is ReentrancyGuard {
         // skip checks if member is setting the delegate key to their member address
         if (newDelegateKey != msg.sender) {
             require(!members[newDelegateKey].exists, "cannot overwrite existing members");
-            require(!members[memberAddressByDelegateKey[newDelegateKey]].exists, "cannot overwrite existing delegate keys");
+            require(
+                !members[memberAddressByDelegateKey[newDelegateKey]].exists,
+                "cannot overwrite existing delegate keys"
+            );
         }
 
         Member storage member = members[msg.sender];
@@ -915,7 +1060,7 @@ contract SushiNomikai is ReentrancyGuard {
     function hasVotingPeriodExpired(uint256 startingPeriod) public view returns (bool) {
         return getCurrentPeriod() >= startingPeriod.add(votingPeriodLength);
     }
-    
+
     /***************
     GETTER FUNCTIONS
     ***************/
@@ -952,32 +1097,52 @@ contract SushiNomikai is ReentrancyGuard {
     /***************
     HELPER FUNCTIONS
     ***************/
-    function unsafeAddToBalance(address user, address token, uint256 amount) private {
+    function unsafeAddToBalance(
+        address user,
+        address token,
+        uint256 amount
+    ) private {
         userTokenBalances[user][token] += amount;
         userTokenBalances[TOTAL][token] += amount;
     }
 
-    function unsafeSubtractFromBalance(address user, address token, uint256 amount) private {
+    function unsafeSubtractFromBalance(
+        address user,
+        address token,
+        uint256 amount
+    ) private {
         userTokenBalances[user][token] -= amount;
         userTokenBalances[TOTAL][token] -= amount;
     }
 
-    function unsafeInternalTransfer(address from, address to, address token, uint256 amount) private {
+    function unsafeInternalTransfer(
+        address from,
+        address to,
+        address token,
+        uint256 amount
+    ) private {
         unsafeSubtractFromBalance(from, token, amount);
         unsafeAddToBalance(to, token, amount);
     }
 
-    function fairShare(uint256 balance, uint256 shares, uint256 totalSharesAndLoot) private pure returns (uint256) {
+    function fairShare(
+        uint256 balance,
+        uint256 shares,
+        uint256 totalSharesAndLoot
+    ) private pure returns (uint256) {
         require(totalSharesAndLoot != 0);
 
-        if (balance == 0) { return 0; }
+        if (balance == 0) {
+            return 0;
+        }
 
         uint256 prod = balance * shares;
 
-        if (prod / balance == shares) { // no overflow in multiplication above?
+        if (prod / balance == shares) {
+            // no overflow in multiplication above?
             return prod / totalSharesAndLoot;
         }
 
         return (balance / totalSharesAndLoot) * shares;
-    } 
+    }
 }
