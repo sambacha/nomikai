@@ -1,3 +1,4 @@
+import '@typechain/hardhat'
 import 'dotenv/config';
 import 'hardhat-deploy';
 import 'hardhat-deploy-ethers';
@@ -62,6 +63,10 @@ const config: HardhatUserConfig = {
   },
   contractSizer: {
     disambiguatePaths: false,
+  },
+  typechain: {
+    outDir: 'src/types',
+    target: 'ethers-v5',
   }
 };
 
