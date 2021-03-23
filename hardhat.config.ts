@@ -1,4 +1,4 @@
-import '@typechain/hardhat'
+import '@typechain/hardhat';
 import 'dotenv/config';
 import 'hardhat-deploy';
 import 'hardhat-deploy-ethers';
@@ -15,7 +15,8 @@ function node(networkName: string) {
 
 function accounts(networkName: string) {
   const uppercase = networkName.toUpperCase();
-  const accounts = process.env[`ETHEREUM_ACCOUNTS_${uppercase}`] || process.env.ETHEREUM_ACCOUNTS || '';
+  const accounts =
+    process.env[`ETHEREUM_ACCOUNTS_${uppercase}`] || process.env.ETHEREUM_ACCOUNTS || '';
   return accounts
     .split(',')
     .map((account) => account.trim())
@@ -67,7 +68,7 @@ const config: HardhatUserConfig = {
   typechain: {
     outDir: 'src/types',
     target: 'ethers-v5',
-  }
+  },
 };
 
 export default config;

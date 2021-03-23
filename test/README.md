@@ -17,13 +17,14 @@ This document is intended to help those interested in learning about testing sol
 Tests should be written, not only to verify correctness of the target code, but to be comprehensively reviewed by other programmers. Therefore, for mission critical solidity code, the quality of the tests are just as important (if not more so) than the code itself, and should be written with the highest standards of clarity and elegance.
 
 ### Tests Should Follow DRY (Don't Repeat Yourself)
-The first pass of unit tests will inevitably proceed faster by copy-pasting the setup and verification code from one test to the next, but these duplicated lines of code get in the way of careful indedepent review. A reviewer must read *every* line of test code and must thus constantly fight the urge to gloss over certain lines that look the same as in the previous test, in case there is a slight but meaningful deviation that requires their evaluation.
+
+The first pass of unit tests will inevitably proceed faster by copy-pasting the setup and verification code from one test to the next, but these duplicated lines of code get in the way of careful indedepent review. A reviewer must read _every_ line of test code and must thus constantly fight the urge to gloss over certain lines that look the same as in the previous test, in case there is a slight but meaningful deviation that requires their evaluation.
 
 After the first pass of unit tests, it is important to refactor the common setup and verification into their own functions. Not only does this save time for a reviewer who only has to review those functions once, but it also **emphasizes the differences** between unit test scenarios and make them easier to reason about.
 
 #### Verification Functions
 
-For each Moloch.sol function, the Moloch tests have a *verification function* that checks each state transition expected from the successful execution of the function.
+For each Moloch.sol function, the Moloch tests have a _verification function_ that checks each state transition expected from the successful execution of the function.
 
 For example, `verifySubmitVote` checks that the `proposal.yesVotes` or `proposal.noVotes` were tallied (depending on which way a member voted), that the `proposal.maxTotalSharesAtYesVote` is updated if needed, and that the vote is also recorded in the `proposal.votesByMember` mapping.
 
@@ -93,7 +94,8 @@ This setup code is re-used in the following 8 tests, which only minimally deviat
     })
 ```
 
-The next unit test changes *ONLY* one thing, which is that it sets the shares requested to the 1e18 (1 x 10^18) to test the maximum value enforced by has been exceeded, and that the call to `submitProposal` properly fails with the correct error message from the triggered `require`: "too many shares requested".
+The next unit test changes _ONLY_ one thing, which is that it sets the shares requested to the 1e18 (1 x 10^18) to test the maximum value enforced by has been exceeded, and that the call to `submitProposal` properly fails with the correct error message from the triggered `require`: "too many shares requested".
+
 ```
     it('require fail - uint overflow', async () => {
       proposal1.sharesRequested = _1e18
@@ -112,6 +114,7 @@ The next unit test changes *ONLY* one thing, which is that it sets the shares re
 ### Trigger Every Require / Assert
 
 There are several reasons to write unit tests trigger every `require` (and `assert`, if you prefer to use those):
+
 1. To make sure that the function fails when it should
 2. To identify obviated `require` checks that no scenario can actually trigger
 3. To force you, the tester, to reason about every single `require` and think about every single way your function can fail
@@ -122,7 +125,7 @@ It is also important to add unique `require` messages for each function and in t
 
 ### Test Modifier Existence
 
-Similar to `require` checks, the proper application of all modifiers should be tested. For example, the `submitProposal` unit tests check the `onlyDelegate` modifier to make sure it prevents access from non-delegates (changing *only* the `from` field from the summoner to the creator and leaving everything else the same).
+Similar to `require` checks, the proper application of all modifiers should be tested. For example, the `submitProposal` unit tests check the `onlyDelegate` modifier to make sure it prevents access from non-delegates (changing _only_ the `from` field from the summoner to the creator and leaving everything else the same).
 
 ```
     it('modifier - delegate', async () => {
@@ -154,7 +157,7 @@ uint256 constant MAX_DILUTION_BOUND = 10**18; // maximum dilution bound
 uint256 constant MAX_NUMBER_OF_SHARES = 10**18; // maximum number of shares that can be minted
 ```
 
-We still check the boundaries, however, as it is not sufficient to check that the maximum value properly fails, it is also necessary to check that *one less than the maximum value* properly succeeds.
+We still check the boundaries, however, as it is not sufficient to check that the maximum value properly fails, it is also necessary to check that _one less than the maximum value_ properly succeeds.
 
 ```
       it('success - request 1 less share than the overflow limit', async () => {
@@ -182,6 +185,7 @@ This likely goes without saying but 100% of the code paths must be tested. For e
 ### Test in a Logical Progression
 
 Like any codebase, the tests should provide an intuitive map of the territory. The tests should roughly align with the usage flow of the smart contract. For example, the Moloch tests are organized in the same order as the Moloch.sol smart contract:
+
 1. constructor
 2. submitProposal
 3. submitVote
@@ -192,6 +196,7 @@ Like any codebase, the tests should provide an intuitive map of the territory. T
 8. more complex tests (multi-member/proposal)
 
 The unit tests for each function are organized as follows:
+
 1. happy cases
 2. trigger requires
 3. check modifiers
